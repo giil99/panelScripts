@@ -1,0 +1,27 @@
+# Dashboard exports
+/exports/*.csv
+/exports/*.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv
+env/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
