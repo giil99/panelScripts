@@ -69,24 +69,50 @@ class ContractsMultipleAssetActive(BaseScript):
         
         self.store_intermediate('assets_raw', df)
         
-        # Group by contract (using acn_fld_Contract__c)
-        contract_assets = df.groupby('acn_fld_Contract__c').apply(
-            lambda x: x.to_dict('records')
-        ).to_dict()
+        # LÓGICA DEL NOTEBOOK: Group by AMBOS campos de contrato
+        # (acn_fld_Contract__c Y vlocity_cmt__ContractId__c)
+        contract_assets_acn = {}
+        contract_assets_vlocity = {}
+        
+        for _, asset in df.iterrows():
+            asset_dict = asset.to_dict()
+            
+            # Agrupar por acn_fld_Contract__c
+            acn_contract = asset_dict.get('acn_fld_Contract__c')
+            if acn_contract and acn_contract != '':
+                if acn_contract not in contract_assets_acn:
+                    contract_assets_acn[acn_contract] = []
+                contract_assets_acn[acn_contract].append(asset_dict)
+            
+            # Agrupar por vlocity_cmt__ContractId__c
+            vlocity_contract = asset_dict.get('vlocity_cmt__ContractId__c')
+            if vlocity_contract and vlocity_contract != '':
+                if vlocity_contract not in contract_assets_vlocity:
+                    contract_assets_vlocity[vlocity_contract] = []
+                contract_assets_vlocity[vlocity_contract].append(asset_dict)
         
         # Filter contracts with more than one active asset
-        multi_asset_contracts = {
-            k: v for k, v in contract_assets.items() 
-            if len(v) > 1 and k is not None and k != ''
+        multi_asset_acn = {
+            k: v for k, v in contract_assets_acn.items() if len(v) > 1
+        }
+        multi_asset_vlocity = {
+            k: v for k, v in contract_assets_vlocity.items() if len(v) > 1
         }
         
-        # Process each contract
+        # Combinar ambos (evitar duplicados usando un set)
+        processed_contracts = set()
         results = []
         casuistica1_count = 0
         casuistica2_count = 0
         revisar_manual_count = 0
         
-        for contract_id, assets in multi_asset_contracts.items():
+        def process_contract_group(contract_id, assets, link_field):
+            """Procesar un grupo de assets de un contrato."""
+            nonlocal casuistica1_count, casuistica2_count, revisar_manual_count
+            
+            if contract_id in processed_contracts:
+                return None
+            processed_contracts.add(contract_id)
             # Sort by CreatedDate (oldest first)
             sorted_assets = sorted(
                 assets, 
@@ -132,8 +158,9 @@ class ContractsMultipleAssetActive(BaseScript):
                 
                 casuistica2_count += 1
             
-            results.append({
+            return {
                 'ContractId': contract_id,
+                'LinkField': link_field,
                 'AssetCount': len(assets),
                 'OldestAssetId': oldest_asset.get('Id'),
                 'OldestAssetName': oldest_asset.get('Name'),
@@ -144,7 +171,18 @@ class ContractsMultipleAssetActive(BaseScript):
                 'Casuistica': casuistica,
                 'TargetStatus': target_status,
                 'AllAssetIds': '; '.join([a.get('Id', '') for a in assets])
-            })
+            }
+        
+        # Procesar AMBOS grupos (ACN y Vlocity) como en el notebook
+        for contract_id, assets in multi_asset_acn.items():
+            result = process_contract_group(contract_id, assets, 'acn_fld_Contract__c')
+            if result:
+                results.append(result)
+        
+        for contract_id, assets in multi_asset_vlocity.items():
+            result = process_contract_group(contract_id, assets, 'vlocity_cmt__ContractId__c')
+            if result:
+                results.append(result)
         
         df_result = pd.DataFrame(results)
         
@@ -189,6 +227,7 @@ class ContractsMultipleAssetActive(BaseScript):
         """Define column configuration."""
         return [
             ColumnConfig('ContractId', 'ID Contrato', ColumnType.LINK),
+            ColumnConfig('LinkField', 'Campo Link', ColumnType.TEXT),
             ColumnConfig('AssetCount', 'Nº Assets', ColumnType.NUMBER),
             ColumnConfig('OldestAssetId', 'Asset Más Viejo', ColumnType.LINK),
             ColumnConfig('OldestAssetStartDate', 'Inicio Viejo', ColumnType.DATE),

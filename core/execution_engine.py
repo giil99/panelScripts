@@ -62,9 +62,10 @@ class ExecutionEngine:
         
         try:
             # Validate prerequisites
-            self._update_progress("validation", 0.05, "Validando requisitos...")
+            self._update_progress("validation", 0.05, "✓ Validando requisitos del script...")
             is_valid, error_msg = script.validate_prerequisites()
             if not is_valid:
+                self._update_progress("validation_failed", 0.05, f"✗ Validación fallida: {error_msg}")
                 return ScriptResult(
                     success=False,
                     error_message=error_msg,
@@ -72,15 +73,18 @@ class ExecutionEngine:
                 )
             
             # Get queries
-            self._update_progress("queries", 0.1, "Obteniendo consultas...")
+            self._update_progress("queries", 0.1, "✓ Obteniendo consultas SOQL...")
             queries = script.get_queries(preview=preview)
             
             if not queries:
+                self._update_progress("no_queries", 0.1, "✗ Error: El script no tiene consultas definidas")
                 return ScriptResult(
                     success=False,
                     error_message="No queries defined",
                     execution_time=time.time() - start_time
                 )
+            
+            self._update_progress("queries_found", 0.12, f"✓ {len(queries)} consulta(s) preparada(s)")
             
             # Execute queries
             query_results = {}
@@ -95,6 +99,11 @@ class ExecutionEngine:
                 )
                 
                 try:
+                    self._update_progress(
+                        "query_exec",
+                        progress - 0.02,
+                        f"⟳ Ejecutando consulta {idx + 1}/{total_queries}..."
+                    )
                     results = self.sf_client.bulk_query(query)
                     df = pd.DataFrame(results)
                     query_results[f"query_{idx}"] = df
@@ -103,52 +112,109 @@ class ExecutionEngine:
                     self._update_progress(
                         "query_result",
                         progress + 0.02,
-                        f"Consulta {idx + 1}: {len(df)} registros obtenidos"
+                        f"✓ Consulta {idx + 1}/{total_queries}: {len(df):,} registros obtenidos"
                     )
                     script.store_intermediate(f"query_{idx}_raw", df)
                 except Exception as e:
                     self._update_progress(
                         "query_error",
                         progress,
-                        f"Error en consulta {idx + 1}: {str(e)}"
+                        f"✗ Error en consulta {idx + 1}: {str(e)}"
                     )
                     script.add_warning(f"Error en consulta {idx + 1}: {str(e)}")
                     query_results[f"query_{idx}"] = pd.DataFrame()
             
             # Process data
-            self._update_progress("processing", 0.70, "Procesando datos...")
-            result = script.process(query_results)
+            self._update_progress("processing", 0.70, "⟳ Procesando datos con lógica de negocio...")
+            
+            # Setup causísticas if script uses them
+            if script.uses_causisticas:
+                self._update_progress("causisticas_setup", 0.65, "✓ Configurando framework de causísticas...")
+                script.setup_causisticas()
+            
+            # Wrap process() in try-except to catch any unhandled errors in script logic
+            try:
+                result = script.process(query_results)
+                self._update_progress("process_done", 0.72, "✓ Procesamiento completado")
+            except Exception as proc_error:
+                error_msg = f"Error en process(): {str(proc_error)}\n{traceback.format_exc()}"
+                self._update_progress("processing_error", 0.70, f"✗ ERROR CRÍTICO en procesamiento: {str(proc_error)}")
+                result = ScriptResult(
+                    success=False,
+                    error_message=error_msg,
+                    execution_time=time.time() - start_time,
+                    warnings=script._warnings
+                )
+                self._save_to_history(script, result, preview)
+                return result
+            
+            # Handle causísticas if present
+            if script.has_causisticas():
+                self._update_progress("causisticas_results", 0.72, "Recopilando resultados de causísticas...")
+                causistica_results = script.get_causistica_results()
+                result.causisticas = causistica_results
+                result.has_causisticas = True
+                
+                # Calculate total records across all causísticas
+                total_causistica_records = sum(
+                    caus.count for caus in causistica_results.values()
+                )
+                self._update_progress(
+                    "causisticas_done",
+                    0.74,
+                    f"Procesadas {len(causistica_results)} causísticas con {total_causistica_records} registros"
+                )
             
             # Log processing result
-            result_count = len(result.data) if result.data is not None else 0
-            self._update_progress(
-                "processing_done",
-                0.75,
-                f"Procesamiento completado: {result_count} registros"
-            )
+            if result.has_causisticas:
+                # For causística-based scripts, show causística summary
+                total_caus_records = sum(
+                    caus.count for caus in result.causisticas.values()
+                ) if result.causisticas else 0
+                self._update_progress(
+                    "processing_done",
+                    0.75,
+                    f"✅ Procesadas {len(result.causisticas)} causísticas ({total_caus_records} registros)"
+                )
+            else:
+                # Standard script result
+                result_count = len(result.data) if result.data is not None else 0
+                self._update_progress(
+                    "processing_done",
+                    0.75,
+                    f"Procesamiento completado: {result_count} registros"
+                )
             
-            # Detect anomalies
-            if result.data is not None and not result.data.empty:
-                self._update_progress("anomalies", 0.80, "Detectando anomalías...")
-                anomalies = script.detect_anomalies(result.data)
-                if not anomalies.empty:
-                    result.anomalies = anomalies
-                    self._update_progress(
-                        "anomalies_done",
-                        0.85,
-                        f"Anomalías detectadas: {len(anomalies)}"
-                    )
+            # Detect anomalies (only for non-causística scripts)
+            if not result.has_causisticas:
+                if result.data is not None and not result.data.empty:
+                    self._update_progress("anomalies", 0.80, "Detectando anomalías...")
+                    anomalies = script.detect_anomalies(result.data)
+                    if not anomalies.empty:
+                        result.anomalies = anomalies
+                        self._update_progress(
+                            "anomalies_done",
+                            0.85,
+                            f"Anomalías detectadas: {len(anomalies)}"
+                        )
+                    else:
+                        self._update_progress(
+                            "anomalies_done",
+                            0.85,
+                            "Sin anomalías detectadas"
+                        )
                 else:
                     self._update_progress(
-                        "anomalies_done",
+                        "no_data",
                         0.85,
-                        "Sin anomalías detectadas"
+                        "Sin datos para analizar anomalías"
                     )
             else:
+                # Skip anomaly detection for causística scripts
                 self._update_progress(
-                    "no_data",
+                    "anomalies_skipped",
                     0.85,
-                    "Sin datos para analizar anomalías"
+                    "✓ Modo causísticas: análisis de anomalías no aplicable"
                 )
             
             # Calculate metrics if not provided
@@ -190,14 +256,17 @@ class ExecutionEngine:
             return result
             
         except Exception as e:
-            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            # Catch any unhandled exceptions (queries, validation, etc.)
+            error_msg = f"Error no controlado: {str(e)}\n{traceback.format_exc()}"
+            self._update_progress("error", 0.0, f"Error crítico: {str(e)}")
             result = ScriptResult(
                 success=False,
                 error_message=error_msg,
                 execution_time=time.time() - start_time,
-                warnings=script._warnings
+                warnings=script._warnings if script else []
             )
-            self._save_to_history(script, result, preview)
+            if script:
+                self._save_to_history(script, result, preview)
             return result
         
         finally:
@@ -205,7 +274,7 @@ class ExecutionEngine:
     
     def _save_to_history(self, script: BaseScript, result: ScriptResult, preview: bool):
         """Save execution to history."""
-        self.execution_history.append({
+        history_entry = {
             "script_name": script.name,
             "script_category": script.category,
             "preview": preview,
@@ -214,8 +283,17 @@ class ExecutionEngine:
             "execution_time": result.execution_time,
             "executed_at": result.executed_at.isoformat(),
             "error_message": result.error_message,
-            "warnings_count": len(result.warnings)
-        })
+            "warnings_count": len(result.warnings),
+            "has_causisticas": result.has_causisticas
+        }
+        
+        if result.has_causisticas:
+            history_entry["causisticas_count"] = len(result.causisticas)
+            history_entry["causisticas_records"] = sum(
+                caus.count for caus in result.causisticas.values()
+            )
+        
+        self.execution_history.append(history_entry)
     
     def get_history(self, limit: int = 50) -> list[dict]:
         """Get recent execution history."""

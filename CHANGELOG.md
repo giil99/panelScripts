@@ -1,5 +1,29 @@
 # Changelog - Dashboard Naturgy Data Scripts
 
+## Versión 2.3 - Sistema de Manejo Robusto de Errores
+
+### 🛡️ Cambios en esta versión
+
+#### ✅ Captura Automática de Errores en Historial
+- **TODOS los errores se guardan como "Fallido"** en el historial persistente
+- **3 niveles de captura** para garantizar ningún error pase desapercibido
+- **Traceback completo** guardado para debugging
+- **Visible en dashboard** con status "Error" 
+
+#### ✅ Niveles de Protección
+1. **Nivel 1 - process()**: Captura errores en lógica de script (división por cero, variables no definidas, pandas errors)
+2. **Nivel 2 - execute()**: Captura errores en queries, validación, conexión
+3. **Nivel 3 - thread**: Captura errores en ejecución del thread, cualquier excepción no controlada
+
+#### ✅ Archivos Modificados
+- `core/execution_engine.py` - Try-except multinivel
+- `pages/script_execution.py` - Guardado persistente de errores
+- `docs/ERROR_HANDLING.md` - Documentación completa
+- `test_error_handling.py` - Script de prueba
+- `test_error_validation.py` - Validación automatizada
+
+---
+
 ## Versión 2.2 - Historial Restaurado como Página Independiente
 
 ### 🎯 Cambios en esta versión

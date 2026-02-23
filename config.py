@@ -14,7 +14,7 @@ EXPORTS_DIR.mkdir(exist_ok=True)
 
 # Salesforce configuration
 SF_API_VERSION = "62.0"
-SF_CREDENTIALS_PATH = BASE_DIR.parent / "salesforce_credentials.json"
+SF_CREDENTIALS_PATH = BASE_DIR / "salesforce_credentials.json"
 
 # UI Configuration
 APP_TITLE = "Naturgy Data Scripts Dashboard"

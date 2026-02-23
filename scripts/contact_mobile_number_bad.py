@@ -1,11 +1,11 @@
 """
-Script: Contact Mobile Number Bad
+Script: Contact Mobile Number Bad (COMPLETO)
 
-Detecta contactos con números de móvil en formato incorrecto
-que pueden causar problemas en comunicaciones y facturación.
+PRESERVA 100% DE LA LÓGICA DEL NOTEBOOK ContactMobileNumberBad.ipynb
+
+Detecta contactos con números de móvil que NO tienen exactamente 12 caracteres.
 """
 import pandas as pd
-import re
 from core.base_script import BaseScript, ScriptResult, ScriptMetrics, ColumnConfig, ColumnType
 from core.script_registry import register_script
 
@@ -14,28 +14,30 @@ from core.script_registry import register_script
 class ContactMobileNumberBad(BaseScript):
     """
     Detecta contactos con números de móvil incorrectos.
+    Preserva 100% de la lógica del notebook: len(mobile) != 12 caracteres.
     """
     
     name = "Contactos - Móvil Incorrecto"
-    description = "Detecta contactos con formato de móvil inválido"
+    description = "Detecta contactos con móvil ≠ 12 caracteres (lógica notebook)"
     category = "Detección de inconsistencias"
-    version = "1.0"
+    version = "2.0"
     author = "AG"
     
     supports_preview = True
     supports_update = True
     requires_confirmation = True
     
-    # Spanish mobile pattern: 6XX XXX XXX or 7XX XXX XXX (9 digits starting with 6 or 7)
-    MOBILE_PATTERN = r'^[67]\d{8}$'
+    # LÓGICA DEL NOTEBOOK: Exactamente 12 caracteres
+    EXPECTED_LENGTH = 12
     
     def get_queries(self, preview: bool = False) -> list[str]:
-        """Return query for contacts with mobile numbers."""
+        """Return query for contacts with mobile numbers (QUERY DEL NOTEBOOK)."""
         limit_clause = "LIMIT 2000" if preview else ""
         
+        # QUERY EXACTA DEL NOTEBOOK
         query = f"""
-            SELECT Id, Name, Email, MobilePhone, Phone,
-                   AccountId, Account.Name, CreatedDate
+            SELECT Id, Name, MobilePhone, AccountId, Account.Name,
+                   Email, Phone, CreatedDate
             FROM Contact
             WHERE MobilePhone != null
             {limit_clause}
@@ -44,7 +46,7 @@ class ContactMobileNumberBad(BaseScript):
         return [query]
     
     def process(self, query_results: dict[str, pd.DataFrame]) -> ScriptResult:
-        """Process contacts to find invalid mobile numbers."""
+        """Process contacts to find invalid mobile numbers (LÓGICA DEL NOTEBOOK)."""
         df = query_results.get('query_0', pd.DataFrame())
         
         if df.empty:
@@ -56,52 +58,42 @@ class ContactMobileNumberBad(BaseScript):
         
         self.store_intermediate('contacts_raw', df)
         
-        # Clean and validate mobile numbers
-        def clean_phone(phone):
-            if pd.isna(phone):
-                return ''
-            # Remove spaces, dashes, dots, and country code
-            cleaned = re.sub(r'[\s\-\.]', '', str(phone))
-            # Remove +34 or 0034
-            cleaned = re.sub(r'^(\+34|0034)', '', cleaned)
-            return cleaned
+        # LÓGICA EXACTA DEL NOTEBOOK: len(mobile) != 12
+        def is_valid_mobile(mobile):
+            if pd.isna(mobile) or mobile is None:
+                return False
+            return len(str(mobile)) == self.EXPECTED_LENGTH
         
-        def is_valid_mobile(phone):
-            cleaned = clean_phone(phone)
-            return bool(re.match(self.MOBILE_PATTERN, cleaned))
-        
-        # Find invalid mobiles
-        df['CleanedMobile'] = df['MobilePhone'].apply(clean_phone)
+        # Filtrar contactos con móvil incorrecto
+        df['MobileLength'] = df['MobilePhone'].apply(lambda x: len(str(x)) if x and not pd.isna(x) else 0)
         df['IsValid'] = df['MobilePhone'].apply(is_valid_mobile)
         
-        invalid_df = df[~df['IsValid']].copy()
+        # NOTEBOOK: Solo contactos con len != 12
+        incorrect_df = df[~df['IsValid']].copy()
         
-        # Categorize issues
-        def categorize_issue(phone):
-            cleaned = clean_phone(phone)
-            if not cleaned:
-                return 'Vacío después de limpiar'
-            if len(cleaned) < 9:
-                return 'Muy corto'
-            if len(cleaned) > 9:
-                return 'Muy largo'
-            if not cleaned[0] in ['6', '7']:
-                return 'No empieza por 6 o 7'
-            if not cleaned.isdigit():
-                return 'Contiene caracteres no numéricos'
-            return 'Formato inválido'
+        # Categorizar problemas por longitud
+        def categorize_length_issue(length):
+            if length == 0:
+                return 'Vacío o nulo'
+            elif length < self.EXPECTED_LENGTH:
+                return f'Muy corto ({length} < {self.EXPECTED_LENGTH})'
+            else:
+                return f'Muy largo ({length} > {self.EXPECTED_LENGTH})'
         
-        if not invalid_df.empty:
-            invalid_df['Issue'] = invalid_df['MobilePhone'].apply(categorize_issue)
+        if not incorrect_df.empty:
+            incorrect_df['Issue'] = incorrect_df['MobileLength'].apply(categorize_length_issue)
         
         # Calculate metrics
-        metrics = ScriptMetrics(total_records=len(invalid_df))
+        metrics = ScriptMetrics(
+            total_records=len(incorrect_df),
+            message=f"Analizados: {len(df)}, Incorrectos: {len(incorrect_df)}, Correctos: {len(df) - len(incorrect_df)}"
+        )
         
         metrics.add_metric(
-            'invalid_mobiles',
-            len(invalid_df),
-            'Móviles Inválidos',
-            '🔴' if len(invalid_df) > 0 else '✅'
+            'incorrect_mobiles',
+            len(incorrect_df),
+            f'≠ {self.EXPECTED_LENGTH} caracteres',
+            '🔴' if len(incorrect_df) > 0 else '✅'
         )
         
         metrics.add_metric(
@@ -112,7 +104,7 @@ class ContactMobileNumberBad(BaseScript):
         )
         
         if len(df) > 0:
-            valid_rate = ((len(df) - len(invalid_df)) / len(df)) * 100
+            valid_rate = ((len(df) - len(incorrect_df)) / len(df)) * 100
             metrics.add_metric(
                 'valid_rate',
                 round(valid_rate, 1),
@@ -120,20 +112,20 @@ class ContactMobileNumberBad(BaseScript):
                 '📈'
             )
         
-        # Count by issue type
-        if not invalid_df.empty:
-            issue_counts = invalid_df['Issue'].value_counts()
+        # Count by issue type (longitud)
+        if not incorrect_df.empty:
+            issue_counts = incorrect_df['Issue'].value_counts()
             for issue, count in issue_counts.items():
                 metrics.add_metric(
                     f'issue_{issue[:10]}',
                     count,
-                    issue[:20],
+                    issue[:30],
                     '⚠️'
                 )
         
         return ScriptResult(
             success=True,
-            data=invalid_df,
+            data=incorrect_df,
             metrics=metrics
         )
     
@@ -142,9 +134,10 @@ class ContactMobileNumberBad(BaseScript):
         return [
             ColumnConfig('Name', 'Nombre', ColumnType.TEXT),
             ColumnConfig('MobilePhone', 'Móvil Original', ColumnType.TEXT),
-            ColumnConfig('CleanedMobile', 'Móvil Limpio', ColumnType.TEXT),
+            ColumnConfig('MobileLength', 'Longitud', ColumnType.NUMBER),
             ColumnConfig('Issue', 'Problema', ColumnType.TEXT),
             ColumnConfig('Account.Name', 'Cuenta', ColumnType.TEXT),
+            ColumnConfig('AccountId', 'Account ID', ColumnType.LINK),
             ColumnConfig('Email', 'Email', ColumnType.TEXT),
         ]
     

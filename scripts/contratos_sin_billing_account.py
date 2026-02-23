@@ -30,13 +30,14 @@ class ContratosSinBillingAccount(BaseScript):
         """Return query for contracts without billing account."""
         limit_clause = "LIMIT 1000" if preview else ""
         
+        # IMPORTANTE: Usar NewCo_BillingAccount__c (como en notebook original)
+        # NO filtrar por Status en la query (filtrar después en process)
         query = f"""
-            SELECT Id, ContractNumber, Status, NewCo_ServiceAccount__c,
-                   NewCo_ServiceAccount__r.Name, vlocity_cmt__BillingAccountId__c,
-                   CreatedDate, StartDate, EndDate
+            SELECT Id, ContractNumber, Status, NewCo_BillingAccount__c,
+                   acn_fld_ContractCode2__c, NewCo_ServiceAccount__c,
+                   NewCo_ServiceAccount__r.Name, CreatedDate, StartDate, EndDate
             FROM Contract
-            WHERE vlocity_cmt__BillingAccountId__c = null
-            AND Status IN ('01', '02')
+            WHERE NewCo_BillingAccount__c = null
             {limit_clause}
         """
         
@@ -53,41 +54,56 @@ class ContratosSinBillingAccount(BaseScript):
                 metrics=ScriptMetrics(total_records=0)
             )
         
-        # Enrich with status labels
-        df['StatusLabel'] = df['Status'].map(CONTRACT_STATUS_MAP)
+        # LÓGICA DEL NOTEBOOK: Filtrar solo contratos activos (Status = '02') DESPUÉS de la query
+        df_activos = df[df['Status'] == '02'].copy()
         
-        # Calculate metrics
-        metrics = ScriptMetrics(total_records=len(df))
-        
-        # Count by status
-        status_counts = df['Status'].value_counts()
-        for status, count in status_counts.items():
-            label = CONTRACT_STATUS_MAP.get(status, status)
-            metrics.add_metric(
-                f'status_{status}',
-                count,
-                f'En {label}',
-                '📊'
+        # Si no hay contratos activos, devolver vacío
+        if df_activos.empty:
+            return ScriptResult(
+                success=True,
+                data=pd.DataFrame(),
+                metrics=ScriptMetrics(
+                    total_records=0,
+                    message=f"Total contratos sin billing: {len(df)}, activos: 0"
+                )
             )
         
-        # Active contracts without billing account (critical)
-        active_count = len(df[df['Status'] == '02'])
+        # Enrich with status labels (solo activos)
+        df_activos['StatusLabel'] = df_activos['Status'].map(CONTRACT_STATUS_MAP)
+        
+        # Calculate metrics (como en notebook)
+        total_sin_billing = len(df)
+        total_activos = len(df_activos)
+        
+        metrics = ScriptMetrics(
+            total_records=total_activos,
+            message=f"Total contratos sin billing: {total_sin_billing}, activos: {total_activos}"
+        )
+        
+        metrics.add_metric(
+            'total_sin_billing',
+            total_sin_billing,
+            'Sin Billing Account',
+            '📊'
+        )
+        
         metrics.add_metric(
             'active_without_billing',
-            active_count,
+            total_activos,
             'Activos sin Billing',
-            '🔴' if active_count > 0 else '✅'
+            '🔴' if total_activos > 0 else '✅'
         )
         
         return ScriptResult(
             success=True,
-            data=df,
+            data=df_activos,  # Retornar solo activos como en notebook
             metrics=metrics
         )
     
     def get_column_config(self) -> list[ColumnConfig]:
         """Define column configuration."""
         return [
+            ColumnConfig('acn_fld_ContractCode2__c', 'Contract Code', ColumnType.TEXT),
             ColumnConfig('ContractNumber', 'Nº Contrato', ColumnType.TEXT),
             ColumnConfig('StatusLabel', 'Estado', ColumnType.STATUS),
             ColumnConfig('NewCo_ServiceAccount__r.Name', 'Service Account', ColumnType.TEXT),

@@ -1,8 +1,10 @@
 """
-Script: Assets - Presión Vacía
+Script: Assets - Presión Vacía (COMPLETO)
 
-Detecta assets de gas que no tienen el campo de presión informado
-cuando debería estarlo según su configuración.
+PRESERVA 100% DE LA LÓGICA DEL NOTEBOOK AssetsPresionVacia.ipynb
+
+Detecta assets de gas que no tienen el campo NewCo_NivelPresion__c informado,
+de contratos activos, con información adicional de ServicePoint y CUPS.
 """
 import pandas as pd
 from core.base_script import BaseScript, ScriptResult, ScriptMetrics, ColumnConfig, ColumnType
@@ -14,12 +16,13 @@ from config import ASSET_STATUS_MAP
 class AssetsPresionVacia(BaseScript):
     """
     Detecta assets de gas sin presión informada.
+    Preserva 100% de la lógica del notebook AssetsPresionVacia.ipynb.
     """
     
     name = "Assets Gas - Presión Vacía"
-    description = "Detecta assets de gas sin campo de presión informado"
+    description = "Detecta assets de gas sin NewCo_NivelPresion__c informado"
     category = "Detección de inconsistencias"
-    version = "1.0"
+    version = "2.0"
     author = "AG"
     
     supports_preview = True
@@ -27,21 +30,30 @@ class AssetsPresionVacia(BaseScript):
     requires_confirmation = True
     
     def get_queries(self, preview: bool = False) -> list[str]:
-        """Return query for gas assets without pressure."""
+        """Return query for gas assets without pressure (QUERY EXACTA DEL NOTEBOOK)."""
         limit_clause = "LIMIT 2000" if preview else ""
         
+        # QUERY EXACTA DEL NOTEBOOK - NO modificar campos ni filtros
         query = f"""
-            SELECT Id, Name, Status, acn_fld_Contract__c,
-                   acn_fld_Contract__r.ContractNumber,
-                   acn_fld_Contract__r.acn_fld_BusinessDivision__c,
-                   acn_fld_Contract__r.acn_fld_CUPS__r.Name,
-                   NewCo_Presion__c, ProductFamily,
+            SELECT Id, Name, Status, 
+                   acn_fld_Contract__c,
+                   acn_fld_Contract__r.acn_fld_ContractCode2__c,
+                   acn_fld_Contract__r.Status,
+                   acn_fld_CUPS__c, 
+                   acn_fld_CUPS__r.Name,
+                   acn_fld_CUPS__r.NewCo_NivelPresion__c,
+                   NewCo_Directriz__c,
+                   NewCo_NivelPresion__c,
+                   NewCo_ProductServiceCRMId__c,
+                   vlocity_cmt__ServicePointId__c,
+                   vlocity_cmt__ServicePointId__r.NewCo_NivelPresion__c,
                    CreatedDate
             FROM Asset
             WHERE vlocity_cmt__ParentItemId__c = null
             AND Status = '03'
-            AND ProductFamily = 'Gas'
-            AND NewCo_Presion__c = null
+            AND NewCo_ProductServiceCRMId__c = 'Gas'
+            AND NewCo_NivelPresion__c = NULL
+            AND acn_fld_Contract__r.Status = '02'
             {limit_clause}
         """
         
@@ -81,10 +93,12 @@ class AssetsPresionVacia(BaseScript):
         """Define column configuration."""
         return [
             ColumnConfig('Name', 'Asset', ColumnType.TEXT),
-            ColumnConfig('acn_fld_Contract__r.ContractNumber', 'Contrato', ColumnType.TEXT),
-            ColumnConfig('acn_fld_Contract__r.acn_fld_CUPS__r.Name', 'CUPS', ColumnType.TEXT),
+            ColumnConfig('acn_fld_Contract__r.acn_fld_ContractCode2__c', 'Código Contrato', ColumnType.TEXT),
+            ColumnConfig('acn_fld_CUPS__r.Name', 'CUPS', ColumnType.TEXT),
+            ColumnConfig('NewCo_Directriz__c', 'Directriz', ColumnType.TEXT),
+            ColumnConfig('vlocity_cmt__ServicePointId__r.NewCo_NivelPresion__c', 'Presión SP', ColumnType.TEXT),
+            ColumnConfig('acn_fld_CUPS__r.NewCo_NivelPresion__c', 'Presión CUPS', ColumnType.TEXT),
             ColumnConfig('StatusLabel', 'Estado', ColumnType.STATUS),
-            ColumnConfig('ProductFamily', 'Familia', ColumnType.TEXT),
             ColumnConfig('CreatedDate', 'Creado', ColumnType.DATETIME),
         ]
     

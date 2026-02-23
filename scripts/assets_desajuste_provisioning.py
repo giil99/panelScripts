@@ -1,12 +1,11 @@
 """
 Script: Assets - Desajuste Provisioning y Action
 
-Detecta assets cuyo estado de provisioning o action no coincide 
-con el estado esperado según su Status.
+Detecta assets con desajuste entre ProvisioningStatus y Action:
+1. ProvisioningStatus='Retired' + Action='Add' → Debería ser 'Disconnect'
+2. Action != 'Add' + ProvisioningStatus='Active' → Inconsistente
 
-Por ejemplo:
-- Assets en status Activo (03) deberían tener ProvisioningStatus='Active'
-- Assets en status Baja deberían tener ProvisioningStatus='Retired', Action='Disconnect'
+Estos desajustes causan errores en Omega.
 """
 import pandas as pd
 from core.base_script import BaseScript, ScriptResult, ScriptMetrics, ColumnConfig, ColumnType
@@ -17,53 +16,37 @@ from config import ASSET_STATUS_MAP
 @register_script
 class AssetsDesajusteProvisioningAction(BaseScript):
     """
-    Detecta assets con desajuste entre Status y Provisioning/Action.
+    Detecta assets con desajuste específico entre ProvisioningStatus y Action.
     """
     
     name = "Assets - Desajuste Provisioning"
-    description = "Detecta inconsistencias entre Estado, Provisioning y Action"
+    description = "Provisioning='Retired'+Action='Add' o Action!='Add'+Prov='Active'"
     category = "Regularización"
-    version = "1.0"
+    version = "2.0"
     author = "AG"
     
     supports_preview = True
     supports_update = True
     requires_confirmation = True
     
-    # Expected provisioning by status
-    STATUS_PROVISIONING_MAP = {
-        '01': ('Pending', None),         # Borrador
-        '02': ('Pending', 'Add'),         # Alta en curso
-        '03': ('Active', 'Add'),          # Activado
-        '04': ('Pending', 'Change'),      # Modificación en curso
-        '05': ('Retired', 'Disconnect'),  # Modificado
-        '06': ('Pending', 'Disconnect'),  # Baja en curso
-        '08': ('Suspended', None),        # Cortado
-        '13': ('Cancelled', 'Disconnect'),# Cancelado
-        '14': ('Retired', 'Disconnect'),  # Baja
-        '15': ('Rejected', 'Disconnect'), # Rechazado
-        '28': ('Retired', 'Disconnect'),  # Inactivo
-    }
-    
     def get_queries(self, preview: bool = False) -> list[str]:
-        """Return query for assets with provisioning info."""
+        """Return query for assets with specific provisioning/action mismatches."""
         limit_clause = "LIMIT 5000" if preview else ""
         
         query = f"""
-            SELECT Id, Name, Status, acn_fld_Contract__c,
-                   acn_fld_Contract__r.ContractNumber,
-                   vlocity_cmt__ProvisioningStatus__c, vlocity_cmt__Action__c,
-                   CreatedDate, LastModifiedDate
+            SELECT Id, Name, Product2.ProductCode, vlocity_cmt__ParentItemId__c,
+                   acn_fld_Contract__r.Status, Status, NewCo_OriginContractType__c,
+                   vlocity_cmt__ProvisioningStatus__c, vlocity_cmt__Action__c, CreatedDate
             FROM Asset
-            WHERE vlocity_cmt__ParentItemId__c = null
-            AND acn_fld_Contract__c != null
+            WHERE (vlocity_cmt__ProvisioningStatus__c = 'Retired' AND vlocity_cmt__Action__c = 'Add')
+               OR (vlocity_cmt__Action__c != 'Add' AND vlocity_cmt__ProvisioningStatus__c = 'Active')
             {limit_clause}
         """
         
         return [query]
     
     def process(self, query_results: dict[str, pd.DataFrame]) -> ScriptResult:
-        """Process assets to find provisioning mismatches."""
+        """Process assets with provisioning/action mismatches."""
         df = query_results.get('query_0', pd.DataFrame())
         
         if df.empty:
@@ -75,108 +58,114 @@ class AssetsDesajusteProvisioningAction(BaseScript):
         
         self.store_intermediate('assets_raw', df)
         
-        # Find mismatches
-        mismatches = []
+        # Add categorization
+        def categorize_issue(row):
+            prov = str(row.get('vlocity_cmt__ProvisioningStatus__c', '')).strip()
+            action = str(row.get('vlocity_cmt__Action__c', '')).strip()
+            
+            if prov == 'Retired' and action == 'Add':
+                return 'Retired+Add (Debería ser Disconnect)'
+            elif action != 'Add' and prov == 'Active':
+                return f'Active+{action} (Inconsistente)'
+            else:
+                return 'Otro'
         
-        for _, row in df.iterrows():
-            status = str(row.get('Status', '')).strip()
-            current_prov = str(row.get('vlocity_cmt__ProvisioningStatus__c', '') or '').strip()
-            current_action = str(row.get('vlocity_cmt__Action__c', '') or '').strip()
-            
-            expected = self.STATUS_PROVISIONING_MAP.get(status)
-            if not expected:
-                continue
-            
-            expected_prov, expected_action = expected
-            
-            # Check for mismatch
-            prov_mismatch = expected_prov and current_prov != expected_prov
-            action_mismatch = expected_action and current_action != expected_action
-            
-            if prov_mismatch or action_mismatch:
-                issues = []
-                if prov_mismatch:
-                    issues.append(f'Prov: {current_prov} → {expected_prov}')
-                if action_mismatch:
-                    issues.append(f'Action: {current_action} → {expected_action}')
-                
-                mismatches.append({
-                    'AssetId': row['Id'],
-                    'AssetName': row['Name'],
-                    'ContractId': row['acn_fld_Contract__c'],
-                    'ContractNumber': row.get('acn_fld_Contract__r.ContractNumber', ''),
-                    'Status': status,
-                    'StatusLabel': ASSET_STATUS_MAP.get(status, status),
-                    'CurrentProvisioning': current_prov,
-                    'CurrentAction': current_action,
-                    'ExpectedProvisioning': expected_prov,
-                    'ExpectedAction': expected_action or '',
-                    'Issues': '; '.join(issues),
-                    'LastModifiedDate': row.get('LastModifiedDate')
-                })
-        
-        df_result = pd.DataFrame(mismatches)
+        df['IssueType'] = df.apply(categorize_issue, axis=1)
+        df['ContractStatus'] = df['acn_fld_Contract__r.Status'].fillna('')
+        df['AssetStatusLabel'] = df['Status'].apply(lambda x: ASSET_STATUS_MAP.get(str(x or ''), str(x or '')))
         
         # Calculate metrics
-        metrics = ScriptMetrics(total_records=len(df_result))
+        metrics = ScriptMetrics(total_records=len(df))
         
         metrics.add_metric(
             'total_mismatches',
-            len(df_result),
-            'Desajustes',
-            '🔴' if len(df_result) > 0 else '✅'
-        )
-        
-        metrics.add_metric(
-            'assets_checked',
             len(df),
-            'Assets Verificados',
-            '📊'
+            'Assets con Desajuste',
+            '❌' if len(df) > 0 else '✅'
         )
         
-        # Count by status
-        if not df_result.empty:
-            status_counts = df_result['StatusLabel'].value_counts()
-            for status, count in status_counts.head(5).items():
-                if status:
-                    metrics.add_metric(
-                        f'status_{status[:10]}',
-                        count,
-                        f'{status[:15]}',
-                        '📊'
-                    )
+        # Count by issue type
+        issue_counts = df['IssueType'].value_counts()
+        for issue_type, count in issue_counts.items():
+            metrics.add_metric(
+                f'issue_{issue_type[:15]}',
+                count,
+                issue_type[:30],
+                '⚠️'
+            )
+        
+        # Count by asset status
+        status_counts = df['AssetStatusLabel'].value_counts()
+        for status, count in status_counts.head(5).items():
+            if status:
+                metrics.add_metric(
+                    f'status_{status[:10]}',
+                    count,
+                    f'{status[:15]}',
+                    '📊'
+                )
         
         return ScriptResult(
             success=True,
-            data=df_result,
+            data=df,
             metrics=metrics
         )
     
     def get_column_config(self) -> list[ColumnConfig]:
         """Define column configuration."""
         return [
-            ColumnConfig('AssetName', 'Asset', ColumnType.TEXT),
-            ColumnConfig('ContractNumber', 'Contrato', ColumnType.TEXT),
-            ColumnConfig('StatusLabel', 'Estado', ColumnType.STATUS),
-            ColumnConfig('CurrentProvisioning', 'Prov. Actual', ColumnType.TEXT),
-            ColumnConfig('ExpectedProvisioning', 'Prov. Esperado', ColumnType.TEXT),
-            ColumnConfig('CurrentAction', 'Action Actual', ColumnType.TEXT),
-            ColumnConfig('ExpectedAction', 'Action Esperado', ColumnType.TEXT),
-            ColumnConfig('Issues', 'Problemas', ColumnType.TEXT),
+            ColumnConfig('Name', 'Asset', ColumnType.LINK),
+            ColumnConfig('IssueType', 'Problema', ColumnType.TEXT),
+            ColumnConfig('AssetStatusLabel', 'Estado Asset', ColumnType.STATUS),
+            ColumnConfig('vlocity_cmt__ProvisioningStatus__c', 'Provisioning', ColumnType.TEXT),
+            ColumnConfig('vlocity_cmt__Action__c', 'Action', ColumnType.TEXT),
+            ColumnConfig('ContractStatus', 'Estado Contrato', ColumnType.STATUS),
+            ColumnConfig('Product2.ProductCode', 'Producto', ColumnType.TEXT),
+            ColumnConfig('NewCo_OriginContractType__c', 'Tipo Origen', ColumnType.TEXT),
+            ColumnConfig('CreatedDate', 'Fecha Creación', ColumnType.DATE),
         ]
     
     def get_groupby_options(self) -> list[str]:
         """Return columns for grouping."""
-        return ['StatusLabel', 'CurrentProvisioning', 'CurrentAction']
+        return ['IssueType', 'AssetStatusLabel', 'vlocity_cmt__ProvisioningStatus__c', 'vlocity_cmt__Action__c']
+    
+    def prepare_update_data(self, data: pd.DataFrame, selected_ids: list[str]) -> list[dict]:
+        """Prepare update records to fix provisioning/action."""
+        updates = []
+        
+        for _, row in data.iterrows():
+            if row['Id'] not in selected_ids:
+                continue
+            
+            prov = str(row.get('vlocity_cmt__ProvisioningStatus__c', '')).strip()
+            action = str(row.get('vlocity_cmt__Action__c', '')).strip()
+            
+            update_record = {'Id': row['Id']}
+            
+            # Fix: Retired + Add → Change Action to Disconnect
+            if prov == 'Retired' and action == 'Add':
+                update_record['vlocity_cmt__Action__c'] = 'Disconnect'
+            
+            # Fix: Active + Not Add → Change Provisioning based on Action
+            elif prov == 'Active' and action != 'Add':
+                if action == 'Disconnect':
+                    update_record['vlocity_cmt__ProvisioningStatus__c'] = 'Retired'
+                elif action == 'Change':
+                    update_record['vlocity_cmt__ProvisioningStatus__c'] = 'Pending'
+            
+            if len(update_record) > 1:  # Only if we have fields to update
+                updates.append(update_record)
+        
+        return updates
     
     def detect_anomalies(self, data: pd.DataFrame) -> pd.DataFrame:
-        """All mismatches are anomalies."""
+        """All assets with provisioning mismatches are anomalies."""
         if data.empty:
             return pd.DataFrame()
         
         anomalies = data.copy()
-        anomalies['anomaly_type'] = 'Desajuste Provisioning/Action'
-        anomalies['anomaly_severity'] = 'Media'
+        anomalies['anomaly_type'] = 'Desajuste Provisioning'
+        anomalies['anomaly_severity'] = 'Alta'
         
         return anomalies
     
@@ -185,25 +174,12 @@ class AssetsDesajusteProvisioningAction(BaseScript):
         return [
             {
                 'type': 'pie',
-                'names': 'StatusLabel',
-                'title': 'Desajustes por Estado'
+                'names': 'IssueType',
+                'title': 'Por Tipo de Problema'
             },
             {
                 'type': 'bar',
-                'x': 'CurrentProvisioning',
-                'title': 'Por Provisioning Actual'
-            }
-        ]
-    
-    def get_update_operations(self) -> list[dict]:
-        """Define update operations."""
-        return [
-            {
-                'name': 'fix_provisioning',
-                'description': 'Corregir Provisioning y Action según Status',
-                'fields': {
-                    'vlocity_cmt__ProvisioningStatus__c': '(valor esperado)',
-                    'vlocity_cmt__Action__c': '(valor esperado)'
-                }
+                'x': 'AssetStatusLabel',
+                'title': 'Por Estado Asset'
             }
         ]

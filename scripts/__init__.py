@@ -41,6 +41,7 @@ from . import contrato_reenganche
 
 # Account and billing scripts
 from . import billing_accounts_without_payment
+from . import billing_accounts_without_payment_completo
 from . import service_account_multiples_contratos
 
 # Data quality scripts
@@ -53,6 +54,10 @@ from . import usuarios_sin_licencia_vlocity
 # Maintenance scripts
 from . import error_log_checkout_renovacion
 from . import fixes_generales
+
+# Enhanced/Complete versions
+from . import contratos_integracion_sap_completo
+from . import contrato_reenganche_v3_completo
 
 __all__ = [
     # Original
@@ -82,6 +87,7 @@ __all__ = [
     'contrato_reenganche',
     # Account/Billing
     'billing_accounts_without_payment',
+    'billing_accounts_without_payment_completo',
     'service_account_multiples_contratos',
     # Data Quality
     'desajuste_tarifa_service_point',
@@ -92,4 +98,7 @@ __all__ = [
     # Maintenance
     'error_log_checkout_renovacion',
     'fixes_generales',
+    # Enhanced/Complete versions
+    'contratos_integracion_sap_completo',
+    'contrato_reenganche_v3_completo',
 ]

@@ -26,33 +26,61 @@ def render():
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        env = st.selectbox(
-            "Entorno",
-            options=["pre", "pro"],
-            format_func=lambda x: "🟡 Preproducción" if x == "pre" else "🔴 Producción",
-            key="sf_env_select"
-        )
-
-        creds_path = st.text_input(
-            "Ruta credenciales",
-            value=str(SF_CREDENTIALS_PATH),
-            key="sf_creds_path"
-        )
-
-        if st.button("🔗 Conectar", type="primary", use_container_width=True):
-            try:
-                with st.spinner("Conectando..."):
-                    client = SalesforceClient(env=env)
-                    client.authenticate(credentials_path=creds_path)
-                    st.session_state.sf_client = client
-                    st.success("Conexión exitosa")
-                    st.rerun()
-            except FileNotFoundError as e:
-                st.error(f"Archivo de credenciales no encontrado: {e}")
-            except ConnectionError as e:
-                st.error(f"Error de conexión: {e}")
-            except Exception as e:
-                st.error(f"Error inesperado: {e}")
+        st.markdown("**Selecciona Entorno:**")
+        
+        # Visual environment selector using columns for buttons
+        env_col1, env_col2, env_col3 = st.columns(3)
+        
+        # Initialize selected environment
+        if 'selected_env' not in st.session_state:
+            st.session_state.selected_env = 'pre'
+        
+        with env_col1:
+            if st.button("🟡 PRE", use_container_width=True, 
+                        type="primary" if st.session_state.selected_env == 'pre' else "secondary"):
+                st.session_state.selected_env = 'pre'
+                st.rerun()
+        
+        with env_col2:
+            if st.button("🔴 PRO", use_container_width=True,
+                        type="primary" if st.session_state.selected_env == 'pro' else "secondary"):
+                st.session_state.selected_env = 'pro'
+                st.rerun()
+        
+        with env_col3:
+            if st.button("🔵 DEV", use_container_width=True,
+                        type="primary" if st.session_state.selected_env == 'dev' else "secondary"):
+                st.session_state.selected_env = 'dev'
+                st.rerun()
+        
+        env = st.session_state.selected_env
+        
+        # Connection buttons
+        st.markdown("")
+        col_connect, col_config = st.columns([2, 1])
+        
+        with col_connect:
+            if st.button("🔗 Conectar", type="primary", use_container_width=True):
+                try:
+                    with st.spinner(f"Conectando a {env.upper()}..."):
+                        client = SalesforceClient(env=env)
+                        # Use credentials from app root automatically
+                        client.authenticate(credentials_path=str(SF_CREDENTIALS_PATH))
+                        st.session_state.sf_client = client
+                        st.success(f"✅ Conectado a {env.upper()}")
+                        st.rerun()
+                except FileNotFoundError as e:
+                    st.error(f"📁 Archivo de credenciales no encontrado.")
+                    st.info("💡 Ve a **⚙️ Configuración de Conexiones** para crear las credenciales.")
+                except ConnectionError as e:
+                    st.error(f"❌ Error de conexión: {e}")
+                except Exception as e:
+                    st.error(f"⚠️ Error: {e}")
+        
+        with col_config:
+            if st.button("⚙️", use_container_width=True, help="Configurar credenciales"):
+                st.session_state.current_page = 'connection_config'
+                st.rerun()
 
     with col2:
         if st.session_state.sf_client and st.session_state.sf_client.is_authenticated:

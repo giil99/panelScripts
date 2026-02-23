@@ -4,7 +4,7 @@ Provides the contract that all scripts must implement.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, Dict, List
 from enum import Enum
 import pandas as pd
 from datetime import datetime
@@ -68,18 +68,28 @@ class ScriptResult:
     execution_time: float = 0.0
     executed_at: datetime = field(default_factory=datetime.now)
     script_instance: Optional[Any] = None  # Reference to the script for UI access
+    causisticas: dict = field(default_factory=dict)  # Dict[str, CausisticaResult] for multi-scenario scripts
+    has_causisticas: bool = False  # Flag to indicate if script uses causística framework
     
     def to_dict(self) -> dict:
         """Convert result to dictionary for serialization."""
-        return {
+        result = {
             "success": self.success,
             "record_count": len(self.data) if self.data is not None else 0,
             "metrics": self.metrics.custom_metrics if self.metrics else {},
             "error_message": self.error_message,
             "warnings": self.warnings,
             "execution_time": self.execution_time,
-            "executed_at": self.executed_at.isoformat()
+            "executed_at": self.executed_at.isoformat(),
+            "has_causisticas": self.has_causisticas
         }
+        
+        if self.has_causisticas:
+            result["causisticas"] = {
+                code: caus.to_dict() for code, caus in self.causisticas.items()
+            }
+        
+        return result
 
 
 class BaseScript(ABC):
@@ -104,6 +114,7 @@ class BaseScript(ABC):
     supports_preview: bool = True  # Can run in preview mode (limit results)
     supports_update: bool = False  # Can perform updates (write operations)
     requires_confirmation: bool = True  # Requires user confirmation before updates
+    uses_causisticas: bool = False  # Set to True if script uses causística framework
     
     def __init__(self, sf_client=None):
         """
@@ -115,6 +126,12 @@ class BaseScript(ABC):
         self.sf_client = sf_client
         self._intermediate_data = {}
         self._warnings = []
+        self._causistica_manager = None
+        
+        # Initialize causística manager if script uses it
+        if self.uses_causisticas:
+            from core.causistica import CausisticaManager
+            self._causistica_manager = CausisticaManager()
     
     @abstractmethod
     def get_queries(self, preview: bool = False) -> list[str]:
@@ -241,6 +258,40 @@ class BaseScript(ABC):
         if self.sf_client is None:
             return False, "Salesforce client not configured"
         return True, ""
+    
+    # Causística framework support methods
+    
+    def setup_causisticas(self):
+        """
+        Setup causísticas for this script.
+        Override this to register causística definitions.
+        
+        Example:
+            from core.causistica import CausisticaDefinition
+            
+            self._causistica_manager.register(CausisticaDefinition(
+                code="A1",
+                name="SC En Corso con Asset Incorrecto",
+                description="...",
+                validator=self._validate_a1,
+                processor=self._process_a1
+            ))
+        """
+        pass
+    
+    def get_causistica_manager(self):
+        """Get the causística manager instance."""
+        return self._causistica_manager
+    
+    def has_causisticas(self) -> bool:
+        """Check if this script uses the causística framework."""
+        return self.uses_causisticas and self._causistica_manager is not None
+    
+    def get_causistica_results(self) -> dict:
+        """Get all causística results from the manager."""
+        if self._causistica_manager:
+            return self._causistica_manager.get_all_results()
+        return {}
     
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.name}>"

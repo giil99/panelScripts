@@ -402,7 +402,7 @@ st.markdown("""
 import scripts
 
 # Import pages
-from pages import home, script_execution, history
+from pages import home, script_execution, history, connection_config
 
 # ── Session State Initialization ────────────────────────────────────────
 defaults = {
@@ -428,6 +428,7 @@ PAGES = {
     'home':             {'label': 'Inicio',           'module': home},
     'script_execution': {'label': 'Ejecutar Scripts',  'module': script_execution},
     'history':          {'label': 'Historial',         'module': history},
+    'connection_config': {'label': '⚙️ Configuración', 'module': connection_config},
 }
 
 
