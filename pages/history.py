@@ -4,6 +4,7 @@ History Page - View execution history (persistent).
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import uuid
 
 from core.history_manager import get_history_manager
 
@@ -78,7 +79,7 @@ def render():
             'execution_time': 'Tiempo (s)',
             'env': 'Entorno'
         }),
-        use_container_width=True,
+        width='stretch',
         hide_index=True
     )
 
@@ -88,11 +89,11 @@ def render():
     with col2:
         col_a, col_b = st.columns(2)
         with col_a:
-            if st.button("Limpiar Historial", type="secondary", use_container_width=True):
+            if st.button("Limpiar Historial", type="secondary", width='stretch'):
                 history_manager.clear()
                 st.rerun()
         with col_b:
-            if st.button("Borrar +30 días", type="secondary", use_container_width=True):
+            if st.button("Borrar +30 días", type="secondary", width='stretch'):
                 history_manager.delete_old(30)
                 st.rerun()
 
@@ -114,7 +115,10 @@ def render():
         fig1.update_traces(textposition='outside')
         fig1.update_xaxes(dtick=1)  # Show only integer ticks
         fig1.update_layout(height=max(300, len(script_counts) * 40), showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
-        st.plotly_chart(fig1, use_container_width=True, key="hist_scripts_chart")
+        
+        # Use a unique key to prevent SPA chart ghosting across pages
+        chart_key_1 = f"hist_scripts_chart_{uuid.uuid4().hex[:8]}"
+        st.plotly_chart(fig1, width='stretch', key=chart_key_1)
     with col2:
         st.markdown("**Resultados**")
         status_counts = df['success'].value_counts()
@@ -131,4 +135,6 @@ def render():
         fig2.update_traces(textposition='outside')
         fig2.update_xaxes(dtick=1)  # Show only integer ticks
         fig2.update_layout(height=200, showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
-        st.plotly_chart(fig2, use_container_width=True, key="hist_status_chart")
+        
+        chart_key_2 = f"hist_status_chart_{uuid.uuid4().hex[:8]}"
+        st.plotly_chart(fig2, width='stretch', key=chart_key_2)

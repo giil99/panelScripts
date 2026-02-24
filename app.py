@@ -201,12 +201,7 @@ st.markdown("""
 
     /* ── Tabs ─────────────────────────────────────────── */
     .stTabs [data-baseweb="tab-list"] {
-        background: var(--bg-card) !important;
-        border-radius: var(--radius) !important;
-        padding: 4px !important;
         gap: 4px !important;
-        border: 1px solid var(--border-card) !important;
-        box-shadow: var(--shadow-sm) !important;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -214,12 +209,15 @@ st.markdown("""
         color: var(--text-secondary) !important;
         font-weight: 500 !important;
         padding: 0.5rem 1rem !important;
+        background: transparent !important;
+        border: none !important;
     }
 
     .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #2563EB, #0EA5E9) !important;
         color: white !important;
         font-weight: 600 !important;
+        border-radius: 8px !important;
     }
 
     /* ── Expander ─────────────────────────────────────── */
