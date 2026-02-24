@@ -648,9 +648,11 @@ def _render_data_tab(db_path: str, total_rows: int, key_prefix: str = "exec", co
                     st.session_state[csv_key] = True; st.rerun()
             else:
                 try:
-                    export_df = result_store.get_data_batch(db_path, offset=0, limit=CSV_MAX_ROWS, filters=filters)
-                    csv_bytes = export_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                    label = f"⬇ CSV ({len(export_df):,})"
+                    csv_bytes = result_store.export_csv_bytes(db_path, max_rows=CSV_MAX_ROWS, filters=filters)
+                    # Count total exported rows based on SQLite row count
+                    export_count = result_store.count_filtered(db_path, filters)
+                    export_count = min(export_count, CSV_MAX_ROWS)
+                    label = f"⬇ CSV ({export_count:,})"
                     st.download_button(
                         label, data=csv_bytes,
                         file_name=f"export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
@@ -668,13 +670,12 @@ def _render_data_tab(db_path: str, total_rows: int, key_prefix: str = "exec", co
                     st.session_state[xlsx_key] = True; st.rerun()
             else:
                 try:
-                    export_df = result_store.get_data_batch(db_path, offset=0, limit=EXCEL_MAX_ROWS, filters=filters)
-                    out = BytesIO()
-                    with pd.ExcelWriter(out, engine='openpyxl') as writer:
-                        export_df.to_excel(writer, index=False, sheet_name='Datos')
-                    label = f"⬇ Excel ({len(export_df):,})"
+                    xlsx_bytes = result_store.export_excel_bytes(db_path, max_rows=EXCEL_MAX_ROWS, filters=filters)
+                    export_count = result_store.count_filtered(db_path, filters)
+                    export_count = min(export_count, EXCEL_MAX_ROWS)
+                    label = f"⬇ Excel ({export_count:,})"
                     st.download_button(
-                        label, data=out.getvalue(),
+                        label, data=xlsx_bytes,
                         file_name=f"export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         key=f"{safe_prefix}_dl_xlsx",
