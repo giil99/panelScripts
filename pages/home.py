@@ -193,7 +193,7 @@ class MiScript(BaseScript):
                     if script['name'] in last_execution:
                         try:
                             last_exec_dt = datetime.fromisoformat(last_execution[script['name']])
-                            last_exec_str = f"<div style='color: #999; font-size: 0.8rem; margin-top: 0.3rem;'>Última ejecución: {last_exec_dt.strftime('%d/%m/%Y %H:%M')}</div>"
+                            last_exec_str = f"<div style='color: #999; font-size: 0.8rem; margin-top: 0.3rem;'>🕓Última ejecución: {last_exec_dt.strftime('%d/%m/%Y %H:%M')}</div>"
                         except:
                             pass
                     

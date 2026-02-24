@@ -37,47 +37,27 @@ class SalesforceClient:
     
     def authenticate(self, credentials_path: str = None) -> bool:
         """
-        Authenticate with Salesforce.
-        
+        Authenticate with Salesforce using sf_bulk.py for unified session handling.
         Args:
             credentials_path: Path to credentials JSON file
-            
         Returns:
             True if authentication successful
         """
-        creds_path = Path(credentials_path or SF_CREDENTIALS_PATH)
-        
-        if not creds_path.exists():
-            raise FileNotFoundError(f"Credentials file not found: {creds_path}")
-        
-        with open(creds_path, 'r', encoding='utf-8') as f:
-            all_creds = json.load(f)
-        
-        if self.env not in all_creds:
-            raise ValueError(f"Environment '{self.env}' not found in credentials file")
-        
-        creds = all_creds[self.env]
-        
-        try:
-            self.sf = Salesforce(
-                username=creds['USERNAME'],
-                password=creds['PASSWORD'],
-                security_token=creds['SECURITY_TOKEN'],
-                domain=creds['DOMAIN']
-            )
-            self.instance_url = self.sf.sf_instance
-            self.session_id = self.sf.session_id
-            self._is_authenticated = True
-            
-            # Initialize bulk API
-            from .bulk_api import BulkAPI
-            self._bulk_api = BulkAPI(self.instance_url, self.session_id)
-            
-            return True
-            
-        except Exception as e:
-            self._is_authenticated = False
-            raise ConnectionError(f"Authentication failed: {str(e)}")
+        import sys
+        from pathlib import Path
+        scripts_dir = str(Path(__file__).parent.parent / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import sf_bulk
+
+        # Use sf_bulk login (will print logs and set global session)
+        sf_bulk.login(self.env)
+        self.instance_url = sf_bulk.instance_url
+        self.session_id = sf_bulk.session_id
+        self._is_authenticated = True
+        self.sf = None  # Not used, but kept for compatibility
+        self._bulk_api = None
+        return True
     
     def disconnect(self):
         """Disconnect from Salesforce."""
@@ -87,38 +67,60 @@ class SalesforceClient:
         self._bulk_api = None
         self._is_authenticated = False
     
-    def query(self, soql: str) -> list[dict]:
+    def query(self, soql: str, poll_interval: int = 15) -> list[dict]:
         """
-        Execute a SOQL query using standard REST API.
-        
-        Args:
-            soql: SOQL query string
-            
-        Returns:
-            List of record dictionaries
-        """
-        if not self._is_authenticated:
-            raise RuntimeError("Not authenticated. Call authenticate() first.")
-        
-        result = self.sf.query_all(soql)
-        return result.get('records', [])
-    
-    def bulk_query(self, soql: str, poll_interval: int = 15) -> list[dict]:
-        """
-        Execute a SOQL query using Bulk API 2.0.
-        Best for large data volumes.
-        
+        Execute a SOQL query using sf_bulk.py for unified logging and efficiency.
         Args:
             soql: SOQL query string
             poll_interval: Seconds between status checks
-            
         Returns:
             List of record dictionaries
         """
         if not self._is_authenticated:
             raise RuntimeError("Not authenticated. Call authenticate() first.")
-        
-        return self._bulk_api.run_query(soql, poll_interval=poll_interval)
+
+        import sys
+        from pathlib import Path
+        scripts_dir = str(Path(__file__).parent.parent / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import sf_bulk
+
+        # Ensure login/session is set
+        if not sf_bulk.session_id or not sf_bulk.instance_url:
+            sf_bulk.login(self.env)
+
+        print(f"[SalesforceClient] Ejecutando query via sf_bulk.py: {soql}")
+        results = sf_bulk.run_bulk_query(soql, poll_interval=poll_interval)
+        return results
+    
+    def bulk_query(self, soql: str, poll_interval: int = 15) -> list[dict]:
+        """
+        Execute a SOQL query using Bulk API 2.0 via sf_bulk.py for better logging and efficiency.
+        Args:
+            soql: SOQL query string
+            poll_interval: Seconds between status checks
+        Returns:
+            List of record dictionaries
+        """
+        if not self._is_authenticated:
+            raise RuntimeError("Not authenticated. Call authenticate() first.")
+
+        # Use sf_bulk.py for bulk query
+        import sys
+        from pathlib import Path
+        scripts_dir = str(Path(__file__).parent.parent / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import sf_bulk
+
+        # Ensure login/session is set
+        if not sf_bulk.session_id or not sf_bulk.instance_url:
+            sf_bulk.login(self.env)
+
+        print(f"[SalesforceClient] Ejecutando bulk_query via sf_bulk.py: {soql}")
+        results = sf_bulk.run_bulk_query(soql, poll_interval=poll_interval)
+        return results
     
     def bulk_update(
         self,

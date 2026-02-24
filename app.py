@@ -303,7 +303,9 @@ st.markdown("""
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
-        padding: 0.3rem 0.8rem;
+        padding: 0.45rem 1rem;
+        margin-bottom: 0.35rem;
+        margin-right: 0.5rem;
         border-radius: 20px;
         font-size: 0.78rem;
         font-weight: 600;
@@ -313,13 +315,20 @@ st.markdown("""
     .status-connected {
         background: #ECFDF5;
         border: 1px solid #A7F3D0;
-        color: #059669;
+        color: #000000 !important;
     }
 
     .status-disconnected {
         background: #FFFBEB;
         border: 1px solid #FDE68A;
-        color: #D97706;
+        color: #000000 !important;
+    }
+
+    /* Sidebar-specific spacing to separate badge from buttons */
+    [data-testid="stSidebar"] .status-badge {
+        margin-bottom: 0.6rem !important;
+        margin-right: 0.5rem !important;
+        display: inline-flex !important;
     }
 
     .section-header {
@@ -363,9 +372,17 @@ st.markdown("""
     /* ── Sidebar Brand ────────────────────────────────── */
     .sidebar-brand {
         text-align: center;
-        padding: 1.2rem 0 1.5rem 0;
+        padding: 1.2rem 0.5.5 1.5rem 0;
         border-bottom: 1px solid rgba(255,255,255,0.1);
-        margin-bottom: 1rem;
+        margin-bottom: 0.6rem;
+    }
+
+    /* Pull the sidebar logo up to remove extra top space */
+    [data-testid="stSidebar"] img {
+        margin-top: -3rem !important;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     .sidebar-brand-title {
@@ -383,6 +400,13 @@ st.markdown("""
         letter-spacing: 0.15em;
         margin-top: 0.3rem;
         font-weight: 500;
+    }
+
+    .sidebar-brand-logo {
+        width: 20px;
+        height: auto;
+        border-radius: 6px;
+        object-fit: contain;
     }
 
     .sidebar-section {
@@ -426,7 +450,7 @@ PAGES = {
     'home':             {'label': 'Inicio',           'module': home},
     'script_execution': {'label': 'Ejecutar Scripts',  'module': script_execution},
     'history':          {'label': 'Historial',         'module': history},
-    'connection_config': {'label': '⚙️ Configuración', 'module': connection_config},
+    'connection_config': {'label': 'Configuración', 'module': connection_config},
 }
 
 
@@ -440,12 +464,24 @@ def main():
 
     # ── Sidebar ─────────────────────────────────────────────────────────
     with st.sidebar:
-        st.markdown("""
-        <div class="sidebar-brand">
-            <div class="sidebar-brand-title">Naturgy Data Scripts</div>
-            <div class="sidebar-brand-sub">Dashboard</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Display logo image from project folder on its own line (centered), then brand text below
+        logo_path = dashboard_dir / "logo.png"
+        try:
+            cols = st.columns([1, 2, 1])
+            if logo_path.exists():
+                cols[1].image(str(logo_path), width=120)
+        except Exception:
+            pass
+
+        st.markdown(
+            """
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-title">Naturgy Data Scripts</div>
+                <div class="sidebar-brand-sub">Dashboard</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         st.markdown('<div class="sidebar-section">Navegación</div>', unsafe_allow_html=True)
 
@@ -456,15 +492,11 @@ def main():
                 navigate_to(key)
                 st.rerun()
 
-        st.divider()
-
         st.markdown('<div class="sidebar-section">Conexión</div>', unsafe_allow_html=True)
 
         if st.session_state.sf_client and st.session_state.sf_client.is_authenticated:
             env = st.session_state.sf_client.env.upper()
-            instance = st.session_state.sf_client.instance_url
             st.markdown(f'<div class="status-badge status-connected">CONECTADO · {env}</div>', unsafe_allow_html=True)
-            st.caption(f"{instance}")
             if st.button("Desconectar", use_container_width=True):
                 st.session_state.sf_client.disconnect()
                 st.session_state.sf_client = None
