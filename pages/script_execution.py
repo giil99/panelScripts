@@ -888,44 +888,24 @@ def _render_anomalies_tab(result, total_rows: int):
 
     st.divider()
 
-    if 'anomaly_type' in anomalies_df.columns:
-        try:
+    try:
+        if 'anomaly_type' in anomalies_df.columns:
             fig = create_bar_chart(anomalies_df, x='anomaly_type', title="Anomalías por Tipo")
             st.plotly_chart(fig, width='stretch')
-        except Exception:
-            pass
+    except Exception:
+        pass
 
-    max_display = 100_000
-    if len(anomalies_df) > max_display:
-        st.warning(f"Mostrando las primeras {max_display:,} anomalías por rendimiento visual.")
-        display_df = anomalies_df.head(max_display)
-    else:
-        display_df = anomalies_df
+    # Save Anomalies DataFrame to SQLite for pagination if not already saved
+    if not hasattr(result, 'anomalies_db_path') or not result.anomalies_db_path:
+        result.anomalies_db_path = result_store.save(anomalies_df)
+        
+    # Fetch column types
+    col_types = result_store.get_column_types(result.anomalies_db_path)
+    
+    st.markdown("### � Detalle de Anomalías")
+    # Reuse the paginated data tab renderer with a unique key prefix
+    _render_data_tab(db_path=result.anomalies_db_path, total_rows=len(anomalies_df), key_prefix="exec_anomalies", col_types=col_types)
 
-    st.dataframe(display_df, width='stretch', hide_index=True, height=400)
-
-    # Lazy CSV to avoid writing huge strings to memory until requested
-    if not st.session_state.get('anomalies_csv_ready'):
-        if st.button("📥 Preparar CSV de Anomalías"):
-            st.session_state['anomalies_csv_ready'] = True
-            st.rerun()
-    else:
-        try:
-            # We enforce a hard limit to avoid 200MB websocket crashes
-            export_df = anomalies_df.head(100_000)
-            csv_bytes = export_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-            label = f"⬇ Descargar CSV ({len(export_df):,})"
-            st.download_button(
-                label,
-                data=csv_bytes,
-                file_name=f"anomalias_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                key="exec_dl_anomalies",
-                on_click=lambda: st.session_state.pop('anomalies_csv_ready', None)
-            )
-        except Exception as e:
-            st.warning(f"Error CSV: {e}")
-            st.session_state.pop('anomalies_csv_ready', None)
 
 
 # ═══════════════════════════════════════════════════════════════════════
