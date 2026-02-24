@@ -558,7 +558,7 @@ def _render_full_results(result):
 # ═══════════════════════════════════════════════════════════════════════
 # Data Tab  (SQLite-backed: O(1) pagination, no DataFrame in RAM)
 # ═══════════════════════════════════════════════════════════════════════
-def _render_data_tab(db_path: str, total_rows: int, key_prefix: str = "exec"):
+def _render_data_tab(db_path: str, total_rows: int, key_prefix: str = "exec", col_types: dict = None):
     """Paginated data table backed by SQLite — instant for any dataset size."""
 
     if not db_path or not os.path.exists(db_path):
@@ -566,7 +566,8 @@ def _render_data_tab(db_path: str, total_rows: int, key_prefix: str = "exec"):
         return
 
     columns = result_store.get_columns(db_path)
-    col_types = st.session_state.get('result_col_types', {})
+    if col_types is None:
+        col_types = st.session_state.get('result_col_types', {})
     _, _, _, cat_vals, _ = _analyze_schema(db_path, columns, col_types)
 
     # Use a highly specific key_prefix to avoid duplicate widgets across reruns
@@ -1116,8 +1117,15 @@ def _render_single_causistica(code: str, caus):
     subtab_data, subtab_charts = st.tabs(["Datos", "Gráficos"])
     
     with subtab_data:
+        # Save DataFrame to SQLite for pagination if not already saved
+        if not hasattr(caus, 'db_path') or not caus.db_path:
+            caus.db_path = result_store.save(df)
+            
+        # Fetch column types
+        col_types = result_store.get_column_types(caus.db_path)
+        
         # Reuse the paginated data tab renderer with a unique key prefix per causística
-        _render_data_tab(df, key_prefix=f"caus_{code}")
+        _render_data_tab(db_path=caus.db_path, total_rows=len(df), key_prefix=f"caus_{code}", col_types=col_types)
     
     with subtab_charts:
         # Detectar columnas disponibles para visualización
