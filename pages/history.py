@@ -113,7 +113,7 @@ def render():
             text=script_counts.values
         )
         fig1.update_traces(textposition='outside')
-        fig1.update_xaxes(dtick=1)  # Show only integer ticks
+        fig1.update_xaxes(dtick=10 if script_counts.values.max() > 20 else 2 if script_counts.values.max() > 5 else 1)
         fig1.update_layout(height=max(300, len(script_counts) * 40), showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
         
         # Use a unique key to prevent SPA chart ghosting across pages
@@ -133,7 +133,7 @@ def render():
             color_discrete_map={'Exitosos': '#10B981', 'Errores': '#EF4444'}
         )
         fig2.update_traces(textposition='outside')
-        fig2.update_xaxes(dtick=1)  # Show only integer ticks
+        fig2.update_xaxes(dtick=10 if status_counts.values.max() > 20 else 2 if status_counts.values.max() > 5 else 1)
         fig2.update_layout(height=200, showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
         
         chart_key_2 = f"hist_status_chart_{uuid.uuid4().hex[:8]}"

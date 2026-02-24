@@ -199,6 +199,38 @@ st.markdown("""
         box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
     }
 
+    /* ── Environment Selector Alignments ─────────────── */
+    .env-selector {
+        margin-top: 2px;
+        margin-bottom: 2px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 100%;
+        min-height: 110px;
+    }
+    
+    .env-selector [data-testid="column"] {
+        padding-left: 0.25rem !important;
+        padding-right: 0.25rem !important;
+    }
+    
+    .env-selector .stButton > button {
+        width: 100% !important;
+        min-height: 38px !important;
+        padding: 0px !important;
+        border-radius: 8px !important;
+        font-size: 0.85rem !important;
+    }
+    
+    .connection-panel {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        min-height: 110px;
+        margin-top: 1.5rem;
+    }
+
     /* ── Tabs ─────────────────────────────────────────── */
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px !important;
@@ -218,6 +250,20 @@ st.markdown("""
         color: white !important;
         font-weight: 600 !important;
         border-radius: 8px !important;
+    }
+
+    /* ── Anti-Flickering / Stale Overrides ────────────── */
+    [data-testid="stFragment"] * {
+        transition: none !important;
+    }
+    .stApp [data-testid="stVerticalBlock"] > div,
+    .stApp [data-testid="stMarkdownContainer"] > div,
+    div[data-stale="true"],
+    .element-container,
+    .stElementContainer {
+        opacity: 1 !important;
+        transition: none !important;
+        animation: none !important;
     }
 
     /* ── Expander ─────────────────────────────────────── */

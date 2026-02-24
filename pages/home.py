@@ -28,8 +28,7 @@ def render():
     with col1:
         st.markdown("**Selecciona Entorno:**")
         
-        # Visual environment selector using columns for buttons
-        env_col1, env_col2, env_col3 = st.columns(3)
+        env_col1, env_col2, env_col3 = st.columns(3, gap="small")
         
         # Initialize selected environment
         if 'selected_env' not in st.session_state:
@@ -37,18 +36,21 @@ def render():
         
         with env_col1:
             if st.button("🟡 PRE", use_container_width=True, 
+                        key="btn_env_pre",
                         type="primary" if st.session_state.selected_env == 'pre' else "secondary"):
                 st.session_state.selected_env = 'pre'
                 st.rerun()
         
         with env_col2:
             if st.button("🔴 PRO", use_container_width=True,
+                        key="btn_env_pro",
                         type="primary" if st.session_state.selected_env == 'pro' else "secondary"):
                 st.session_state.selected_env = 'pro'
                 st.rerun()
         
         with env_col3:
             if st.button("🔵 DEV", use_container_width=True,
+                        key="btn_env_dev",
                         type="primary" if st.session_state.selected_env == 'dev' else "secondary"):
                 st.session_state.selected_env = 'dev'
                 st.rerun()
@@ -56,8 +58,7 @@ def render():
         env = st.session_state.selected_env
         
         # Connection buttons
-        st.markdown("")
-        col_connect, col_config = st.columns([2, 1])
+        col_connect, col_config = st.columns([2, 1], gap="small")
         
         with col_connect:
             if st.button("🔗 Conectar", type="primary", use_container_width=True):
@@ -85,23 +86,27 @@ def render():
     with col2:
         if st.session_state.sf_client and st.session_state.sf_client.is_authenticated:
             st.markdown(f"""
-            <div class="info-card">
-                <div class="status-badge status-connected" style="margin-bottom: 0.8rem;">🟢 Conectado</div>
-                <p style="margin: 0.3rem 0; color: var(--text-secondary); font-size: 0.85rem;">
-                    <strong>Entorno:</strong> {st.session_state.sf_client.env.upper()}
-                </p>
-                <p style="margin: 0.3rem 0; color: var(--text-secondary); font-size: 0.85rem;">
-                    <strong>Instance:</strong> {st.session_state.sf_client.instance_url}
-                </p>
+            <div class="connection-panel">
+                <div class="info-card" style="width: 100%;">
+                    <div class="status-badge status-connected" style="margin-bottom: 0.8rem;">🟢 Conectado</div>
+                    <p style="margin: 0.3rem 0; color: var(--text-secondary); font-size: 0.85rem;">
+                        <strong>Entorno:</strong> {st.session_state.sf_client.env.upper()}
+                    </p>
+                    <p style="margin: 0.3rem 0; color: var(--text-secondary); font-size: 0.85rem;">
+                        <strong>Instance:</strong> {st.session_state.sf_client.instance_url}
+                    </p>
+                </div>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
-            <div class="info-card">
-                <div class="status-badge status-disconnected" style="margin-bottom: 0.8rem;">DESCONECTADO</div>
-                <p style="margin: 0.3rem 0; color: var(--text-muted); font-size: 0.85rem;">
-                    Conecta a Salesforce para ejecutar scripts.
-                </p>
+            <div class="connection-panel">
+                <div class="info-card" style="width: 100%;">
+                    <div class="status-badge status-disconnected" style="margin-bottom: 0.8rem;">DESCONECTADO</div>
+                    <p style="margin: 0.3rem 0; color: var(--text-muted); font-size: 0.85rem;">
+                        Conecta a Salesforce para ejecutar scripts.
+                    </p>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -193,7 +198,7 @@ class MiScript(BaseScript):
                     if script['name'] in last_execution:
                         try:
                             last_exec_dt = datetime.fromisoformat(last_execution[script['name']])
-                            last_exec_str = f"<div style='color: #999; font-size: 0.8rem; margin-top: 0.3rem;'>🕓Última ejecución: {last_exec_dt.strftime('%d/%m/%Y %H:%M')}</div>"
+                            last_exec_str = f"<div style='color: #999; font-size: 0.8rem; margin-top: 0.3rem;'>🕓 Última ejecución: {last_exec_dt.strftime('%d/%m/%Y %H:%M')}</div>"
                         except:
                             pass
                     

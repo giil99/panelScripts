@@ -224,8 +224,7 @@ class ContratosActivosCortados(BaseScript):
         return ScriptResult(
             success=True,
             data=df_resultado,
-            metrics=metrics,
-            anomalies=df_resultado if not df_resultado.empty else None
+            metrics=metrics
         )
     
     def get_column_config(self) -> list[ColumnConfig]:

@@ -62,7 +62,6 @@ class ScriptResult:
     data: Optional[pd.DataFrame] = None
     metrics: Optional[ScriptMetrics] = None
     intermediate_data: dict = field(default_factory=dict)  # Data from each query step
-    anomalies: Optional[pd.DataFrame] = None  # Records flagged as anomalies
     error_message: Optional[str] = None
     warnings: list = field(default_factory=list)
     execution_time: float = 0.0
@@ -168,19 +167,6 @@ class BaseScript(ABC):
             List of ColumnConfig objects
         """
         return []  # Default: auto-detect from DataFrame
-    
-    def detect_anomalies(self, data: pd.DataFrame) -> pd.DataFrame:
-        """
-        Detect anomalies in the processed data.
-        Override to implement custom anomaly detection.
-        
-        Args:
-            data: Processed DataFrame
-            
-        Returns:
-            DataFrame containing only anomalous records
-        """
-        return pd.DataFrame()  # Default: no anomalies
     
     def get_groupby_options(self) -> list[str]:
         """

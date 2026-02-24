@@ -56,12 +56,13 @@ def render_kpis(
                 else:
                     delta_str = str(kpi.delta)
             
+            # Using the `help` attribute on st.metric natively provides a tooltip on hover.
             st.metric(
                 label=f"{kpi.icon} {kpi.label}",
                 value=display_value,
                 delta=delta_str,
                 delta_color=kpi.delta_color,
-                help=kpi.help_text
+                help=kpi.help_text or kpi.label
             )
 
 

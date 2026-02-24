@@ -231,17 +231,20 @@ def _render_console_content():
         # Limit visible log lines to last 200 to prevent DOM bloat
         visible_log = console_log[-200:] if len(console_log) > 200 else console_log
         truncation_notice = (
-            f'<div style="color:#64748B;font-size:0.75rem;padding:0.25rem 0;">'
+            f'<div style="color:#64748B;font-size:0.75rem;padding:0.25rem 0;text-align:center;border-bottom:1px solid #1E293B;margin-bottom:0.5rem;width:100%;">'
             f'... {len(console_log) - 200} líneas anteriores omitidas</div>'
         ) if len(console_log) > 200 else ''
-        # Escape each line before injecting into HTML
-        formatted_lines = '<br>'.join(_format_log_line(line) for line in visible_log)
+        
+        # Reverse the dom order and wrap them so flex-column-reverse renders them natively pinned to bottom
+        reversed_log = list(reversed(visible_log))
+        formatted_lines = ''.join(f'<div>{_format_log_line(line)}</div>' for line in reversed_log)
+        
         st.markdown(
-            f'<div style="background:#0F172A;color:#CBD5E1;padding:1rem;border-radius:10px;'
+            f'<div class="exec-console" style="background:#0F172A;color:#CBD5E1;padding:1rem;border-radius:10px;'
             f'font-family:\'Consolas\',\'Monaco\',\'Courier New\',monospace;font-size:0.82rem;'
-            f'max-height:450px;overflow-y:auto;line-height:1.7;'
+            f'height:450px;overflow-y:auto;display:flex;flex-direction:column-reverse;line-height:1.7;'
             f'border:1px solid #1E293B;box-shadow:0 2px 8px rgba(0,0,0,0.1);">'
-            f'{truncation_notice}{formatted_lines}</div>',
+            f'{formatted_lines}{truncation_notice}</div>',
             unsafe_allow_html=True
         )
     else:
@@ -321,26 +324,37 @@ def render():
     # Show console if script is running OR if there are logs to show
     show_console = script_executing or has_pending_result or st.session_state.get('execution_console_log')
     
+    console_placeholder = st.empty()
+
     if script_executing:
-        st.info("❗ **Script en ejecución:** " + st.session_state.get('executing_script_name', 'Desconocido'))
-        st.markdown("*El script se está ejecutando en segundo plano. Los resultados se mostrarán cuando finalice.*")
-        st.divider()
-        
-        # Auto-updating console while executing
-        @st.fragment(run_every=2)
-        def render_execution_console():
-            """Render execution console with auto-refresh."""
-            script_still_running = st.session_state.get('script_executing', False)
-            result_ready = st.session_state.get('execution_result') is not None
+        with console_placeholder.container():
+            st.info("❗ **Script en ejecución:** " + st.session_state.get('executing_script_name', 'Desconocido'))
+            st.markdown("*El script se está ejecutando en segundo plano. Los resultados se mostrarán cuando finalice.*")
+            st.divider()
             
-            if not script_still_running and result_ready:
-                st.rerun()
+            # Auto-updating console while executing
+            @st.fragment(run_every=2)
+            def render_execution_console():
+                """Render execution console with auto-refresh."""
+                # Break fragment loop if user navigated to another page
+                if st.session_state.get('current_page') != 'script_execution':
+                    st.rerun()
+                    
+                script_still_running = st.session_state.get('script_executing', False)
+                has_error = st.session_state.get('execution_error') is not None
+                result_ready = st.session_state.get('execution_result') is not None
+                
+                # If script finished (either success or error), trigger full rerun to exit the fragment loop
+                if not script_still_running and (result_ready or has_error):
+                    st.rerun()
+                
+                _render_console_content()
             
-            _render_console_content()
-        
-        render_execution_console()
-        st.markdown("<br>", unsafe_allow_html=True)
+            render_execution_console()
+            st.markdown("<br>", unsafe_allow_html=True)
         return  # Don't show script selection while executing
+    else:
+        console_placeholder.empty()
 
     # Only show recent results banner if NOT executing
     if not st.session_state.get('script_executing', False) and st.session_state.current_result:
@@ -507,14 +521,11 @@ def _render_full_results(result):
     # ── Summary Metrics ─────────────────────────────────────────────────
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Registros", value=f"{total_rows:,}")
+        st.metric("Registros", value=f"{total_rows:,}", help="Total de Registros")
     with col2:
-        st.metric("Tiempo", value=f"{result.execution_time:.2f}s")
+        st.metric("Tiempo", value=f"{result.execution_time:.2f}s", help="Tiempo de Ejecución")
     with col3:
-        st.metric("Estado", value="OK" if result.success else "Error")
-    with col4:
-        st.metric("Anomalías", value=len(result.anomalies) if result.anomalies is not None else 0)
-
+        st.metric("Estado", value="OK" if result.success else "Error", help="Estado Final")
     if result.metrics and result.metrics.custom_metrics:
         kpi_panel = KPIPanel()
         kpi_panel.add_from_metrics(result.metrics.custom_metrics)
@@ -530,8 +541,8 @@ def _render_full_results(result):
     st.markdown("")
 
     # ── Tabbed Results ──────────────────────────────────────────────────
-    tab_analysis, tab_data, tab_charts, tab_anomalies = st.tabs([
-        "Análisis", "Datos", "Gráficos", "Anomalías"
+    tab_analysis, tab_data, tab_charts = st.tabs([
+        "Análisis", "Datos", "Gráficos"
     ])
 
     with tab_analysis:
@@ -543,8 +554,6 @@ def _render_full_results(result):
     with tab_charts:
         _render_charts_tab(db_path=db_path, columns=columns, col_types=col_types)
 
-    with tab_anomalies:
-        _render_anomalies_tab(result, total_rows)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -859,50 +868,6 @@ def _render_analysis_tab(db_path: str, columns: list, col_types: dict, total_row
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Anomalies Tab
-# ═══════════════════════════════════════════════════════════════════════
-def _render_anomalies_tab(result, total_rows: int):
-    """Render anomalies section."""
-
-    if result.anomalies is None or result.anomalies.empty:
-        st.success("No se detectaron anomalías en los datos.")
-        return
-
-    anomalies_df = result.anomalies
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Anomalías", len(anomalies_df))
-    with col2:
-        pct = len(anomalies_df) / total_rows * 100 if total_rows > 0 else 0
-        st.metric("% del Total", f"{pct:.1f}%")
-    with col3:
-        if 'anomaly_type' in anomalies_df.columns:
-            st.metric("Tipos", anomalies_df['anomaly_type'].nunique())
-
-    st.divider()
-
-    try:
-        if 'anomaly_type' in anomalies_df.columns:
-            fig = create_bar_chart(anomalies_df, x='anomaly_type', title="Anomalías por Tipo")
-            st.plotly_chart(fig, width='stretch')
-    except Exception:
-        pass
-
-    # Save Anomalies DataFrame to SQLite for pagination if not already saved
-    if not hasattr(result, 'anomalies_db_path') or not result.anomalies_db_path:
-        result.anomalies_db_path = result_store.save(anomalies_df)
-        
-    # Fetch column types
-    col_types = result_store.get_column_types(result.anomalies_db_path)
-    
-    st.markdown("### � Detalle de Anomalías")
-    # Reuse the paginated data tab renderer with a unique key prefix
-    _render_data_tab(db_path=result.anomalies_db_path, total_rows=len(anomalies_df), key_prefix="exec_anomalies", col_types=col_types)
-
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # Causística Results Rendering
 # ═══════════════════════════════════════════════════════════════════════
 def _sanitize_sheet_name(name: str) -> str:
@@ -1079,7 +1044,7 @@ def _render_single_causistica(code: str, caus):
                 icon = metric_info.get('icon', '📊')
                 label = metric_info.get('label', key)
                 value = metric_info.get('value', 0)
-                st.metric(f"{icon} {label}", value)
+                st.metric(f"{icon} {label}", value, help=label)
     
     if caus.data is None or caus.data.empty:
         st.info(f"No hay registros para la causística {code}")
@@ -1107,9 +1072,7 @@ def _render_single_causistica(code: str, caus):
         categorical_cols = []
         for c in df.columns:
             unique_count = df[c].nunique()
-            # Aceptar columnas con 2-50 valores únicos
-            if 1 < unique_count <= 50:
-                # Incluir todos los tipos: object (strings), bool, category, Int64
+            if 0 < unique_count <= 100:
                 if df[c].dtype in ['object', 'bool', 'category'] or df[c].dtype.name.startswith('Int'):
                     categorical_cols.append(c)
         
@@ -1162,38 +1125,7 @@ def _render_single_causistica(code: str, caus):
                     except Exception as e:
                         st.error(f"Error generando gráficos categóricos: {str(e)}")
                     
-                    # Opción adicional: visualizar otras columnas categóricas
-                    if len(categorical_cols) > 1:
-                        st.divider()
-                        st.markdown("**🔍 Explorar otras columnas categóricas**")
-                        
-                        other_cols = [c for c in categorical_cols if c != chart_col]
-                        selected_others = st.multiselect(
-                            "Selecciona columnas adicionales para ver distribuciones",
-                            options=other_cols,
-                            key=f"exec_caus_{code}_other_cats",
-                            help="Puedes seleccionar múltiples columnas"
-                        )
-                        
-                        if selected_others:
-                            for idx, col_name in enumerate(selected_others):
-                                with st.expander(f"📊 Distribución de {col_name}", expanded=False):
-                                    col_a, col_b = st.columns(2)
-                                    with col_a:
-                                        counts_other = df[col_name].value_counts().reset_index()
-                                        counts_other.columns = [col_name, 'Cantidad']
-                                        fig_bar_other = create_bar_chart(counts_other, x=col_name, y='Cantidad',
-                                                                         title=f"Distribución por {col_name}")
-                                        st.plotly_chart(fig_bar_other, width='stretch', 
-                                                       key=f"caus_{code}_bar_other_{idx}_{col_name}")
-                                    with col_b:
-                                        fig_pie_other = create_pie_chart(df, names=col_name,
-                                                                         title=f"Proporción por {col_name}")
-                                        st.plotly_chart(fig_pie_other, width='stretch',
-                                                       key=f"caus_{code}_pie_other_{idx}_{col_name}")
-                                    
-                                    # Tabla de frecuencias
-                                    st.dataframe(counts_other, width='stretch', hide_index=True)
+
                 
                 tab_idx += 1
             
@@ -1226,11 +1158,6 @@ def _render_single_causistica(code: str, caus):
                             fig_box = px.box(df, y=selected_numeric, 
                                             title=f"Box Plot de {selected_numeric}")
                             st.plotly_chart(fig_box, width='stretch', key=f"caus_{code}_box_{selected_numeric}")
-                        
-                        # Statistics summary
-                        st.markdown("**📈 Estadísticas Descriptivas**")
-                        stats_df = df[selected_numeric].describe().to_frame().T
-                        st.dataframe(stats_df, width='stretch', hide_index=True)
                         
                     except Exception as e:
                         st.error(f"Error generando gráficos numéricos: {str(e)}")

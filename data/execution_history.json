@@ -596,5 +596,83 @@
     "preview": false,
     "env": "pre",
     "executed_at": "2026-02-24T14:55:01.778097"
+  },
+  {
+    "id": 47,
+    "script_name": "Contratos - Reenganche V3 Completo",
+    "script_category": "Detección de inconsistencias",
+    "success": true,
+    "record_count": 2,
+    "execution_time": 395.39,
+    "error_message": null,
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T20:12:30.333315"
+  },
+  {
+    "id": 48,
+    "script_name": "Contratos - Reenganche V3 Completo",
+    "script_category": "Detección de inconsistencias",
+    "success": true,
+    "record_count": 2,
+    "execution_time": 420.02,
+    "error_message": null,
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T20:33:59.293514"
+  },
+  {
+    "id": 49,
+    "script_name": "Contratos - Reenganche V3 Completo",
+    "script_category": "Detección de inconsistencias",
+    "success": true,
+    "record_count": 2,
+    "execution_time": 379.02,
+    "error_message": null,
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T20:44:09.900395"
+  },
+  {
+    "id": 50,
+    "script_name": "Contratos Activos con Assets Cortados",
+    "script_category": "Regularización",
+    "success": false,
+    "record_count": 0,
+    "execution_time": 300.57,
+    "error_message": "Error en process(): ScriptResult.__init__() got an unexpected keyword argument 'anomalies'\nTraceback (most recent call last):\n  File \"C:\\Users\\adria\\Desktop\\Salesforce Log AG v2\\Nueva carpeta\\core\\execution_engine.py\", line 137, in execute\n    result = script.process(query_results)\n  File \"C:\\Users\\adria\\Desktop\\Salesforce Log AG v2\\Nueva carpeta\\scripts\\contratos_activos_cortados.py\", line 224, in process\n    return ScriptResult(\n        success=True,\n    ...<2 lines>...\n        anomalies=df_resultado if not df_resultado.empty else None\n    )\nTypeError: ScriptResult.__init__() got an unexpected keyword argument 'anomalies'\n",
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T20:53:21.489894"
+  },
+  {
+    "id": 51,
+    "script_name": "Contratos Activos con Assets Cortados",
+    "script_category": "Regularización",
+    "success": true,
+    "record_count": 0,
+    "execution_time": 249.95,
+    "error_message": null,
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T21:03:51.811942"
+  },
+  {
+    "id": 52,
+    "script_name": "Assets sin Directriz",
+    "script_category": "Detección de inconsistencias",
+    "success": true,
+    "record_count": 1266176,
+    "execution_time": 112.66,
+    "error_message": null,
+    "warnings_count": 0,
+    "preview": false,
+    "env": "pre",
+    "executed_at": "2026-02-24T21:07:34.168772"
   }
 ]
