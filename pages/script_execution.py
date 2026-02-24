@@ -321,41 +321,26 @@ def render():
     # Show console if script is running OR if there are logs to show
     show_console = script_executing or has_pending_result or st.session_state.get('execution_console_log')
     
-    if show_console:
-        if script_executing:
-            st.info("❗ **Script en ejecución:** " + st.session_state.get('executing_script_name', 'Desconocido'))
-            st.markdown("*El script se está ejecutando en segundo plano. Los resultados se mostrarán cuando finalice.*")
-        elif has_pending_result:
-            st.success("✅ **Ejecución completada** - Revisa los resultados abajo")
-        
+    if script_executing:
+        st.info("❗ **Script en ejecución:** " + st.session_state.get('executing_script_name', 'Desconocido'))
+        st.markdown("*El script se está ejecutando en segundo plano. Los resultados se mostrarán cuando finalice.*")
         st.divider()
         
-        # Use fragment for auto-updating console - only while executing
-        if script_executing:
-            @st.fragment(run_every=2)  # Auto-update every 2 seconds (reduces flicker)
-            def render_execution_console():
-                """Render execution console with auto-refresh."""
-                
-                # Check if execution finished and result is ready
-                script_still_running = st.session_state.get('script_executing', False)
-                result_ready = st.session_state.get('execution_result') is not None
-                
-                if not script_still_running and result_ready:
-                    # Execution finished, trigger full page reload to show results
-                    st.rerun()
-                
-                _render_console_content()
+        # Auto-updating console while executing
+        @st.fragment(run_every=2)
+        def render_execution_console():
+            """Render execution console with auto-refresh."""
+            script_still_running = st.session_state.get('script_executing', False)
+            result_ready = st.session_state.get('execution_result') is not None
             
-            render_execution_console()
-        else:
-            # Show static console after execution
+            if not script_still_running and result_ready:
+                st.rerun()
+            
             _render_console_content()
         
+        render_execution_console()
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Don't show script selection while a script is running
-        if script_executing:
-            return
+        return  # Don't show script selection while executing
 
     # Only show recent results banner if NOT executing
     if not st.session_state.get('script_executing', False) and st.session_state.current_result:
@@ -447,8 +432,16 @@ def render():
     if execute_button:
         _execute_script(selected_script_name, execute_updates)
 
+    st.divider()
+
+    # ── Static Console After Execution ──────────────────────────────────
+    if (has_pending_result or st.session_state.get('execution_console_log')) and not script_executing:
+        st.success("✅ **Ejecución completada** - Revisa los resultados abajo")
+        _render_console_content()
+        st.markdown("<br>", unsafe_allow_html=True)
+
     # ── Show full results inline (only if not executing) ────────────────
-    if st.session_state.current_result and not st.session_state.get('script_executing', False):
+    if st.session_state.current_result and not script_executing:
         st.divider()
         _render_full_results(st.session_state.current_result)
 
