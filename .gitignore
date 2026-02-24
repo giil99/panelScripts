@@ -25,3 +25,4 @@ venv/
 
 # Streamlit
 .streamlit/secrets.toml
+salesforce_credentials.json
